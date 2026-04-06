@@ -27,6 +27,7 @@ const Login = () => {
 
       // High-End Security: Save the JWT token to local storage
       localStorage.setItem('examifyUser', JSON.stringify(data));
+      localStorage.setItem('examifyToken', data.token);
 
       console.log('✅ Logged in successfully:', data);
 

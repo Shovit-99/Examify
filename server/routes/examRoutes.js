@@ -1,19 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/authMiddleware');
+const { getExams, getSingleExam, createExam, updateExam, deleteExam, getSubjects } = require('../controllers/examController');
 
-// Import your controller functions (we will build these next)
-const { getExams, createExam, deleteExam } = require('../controllers/examController');
+// Public access - students need to see exams
+router.get('/', getExams);
+router.get('/subjects', getSubjects);
+router.get('/:id', getSingleExam);
 
-// 1. PUBLIC ROUTE: No middleware. Anyone can see the list of exams.
-// router.get('/', getExams);
-
-// 2. PROTECTED ROUTE: Only logged-in users (Students, Teachers, Admins)
-// router.get('/:id', protect, getSingleExam);
-
-// 3. ADMIN/TEACHER ONLY ROUTE: Requires both 'protect' AND 'admin'
-// If a student hits this, the 'admin' bouncer will kick them out!
+// Admin only
 router.post('/create', protect, admin, createExam);
+router.put('/:id', protect, admin, updateExam);
 router.delete('/:id', protect, admin, deleteExam);
 
 module.exports = router;
