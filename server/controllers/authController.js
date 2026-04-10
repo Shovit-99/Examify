@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const RegistrationCode = require('../models/RegistrationCode');
 const jwt = require('jsonwebtoken');
 
 // Helper function to generate the secure token
@@ -22,7 +23,7 @@ const verifyEmailForRole = (email, role) => {
 
 // --- 1. REGISTER USER ---
 exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, subject, registrationCode } = req.body;
   try {
     // Verify email matches the role
     if (!verifyEmailForRole(email, role)) {
@@ -31,16 +32,61 @@ exports.registerUser = async (req, res) => {
       });
     }
 
+    // SECURITY: Verify registration code for teachers
+    if (role === 'teacher') {
+      if (!registrationCode) {
+        return res.status(400).json({ 
+          message: 'Teacher registration code is required' 
+        });
+      }
+
+      const code = await RegistrationCode.findOne({
+        code: registrationCode.toUpperCase(),
+        isUsed: false,
+        expiresAt: { $gt: new Date() }
+      });
+
+      if (!code) {
+        return res.status(400).json({ 
+          message: 'Invalid, expired, or already used registration code' 
+        });
+      }
+
+      // Subject from code must match the requested subject
+      if (code.subject !== subject) {
+        return res.status(400).json({ 
+          message: `Registration code is for ${code.subject} subject only` 
+        });
+      }
+    }
+
+    // Verify subject is provided for teachers
+    if (role === 'teacher' && !subject) {
+      return res.status(400).json({ 
+        message: 'Subject is required for teacher registration' 
+      });
+    }
+
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'User already exists' });
 
-    const user = await User.create({ name, email, password, role });
+    const user = await User.create({ name, email, password, role, subject });
+    
     if (user) {
+      // Mark registration code as used
+      if (role === 'teacher') {
+        await RegistrationCode.findOneAndUpdate(
+          { code: registrationCode.toUpperCase() },
+          { isUsed: true, usedBy: user._id, usedAt: new Date() }
+        );
+      }
+
       res.status(201).json({
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        subject: user.subject,
         token: generateToken(user._id),
       });
     }
@@ -68,6 +114,7 @@ exports.authUser = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        subject: user.subject,
         token: generateToken(user._id),
       });
     } else {

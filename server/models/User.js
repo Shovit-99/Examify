@@ -10,6 +10,18 @@ const userSchema = new mongoose.Schema({
     enum: ['student', 'admin', 'teacher'], 
     default: 'student' 
   },
+  subject: {
+    type: String,
+    enum: [
+      'Software Engineering',
+      'Theory of Computation',
+      'Advance Frontend',
+      'Container Technologies',
+      'Hydrogen Energy',
+      'Technical Training'
+    ],
+    required: function() { return this.role === 'teacher'; }
+  }
 }, { timestamps: true });
 
 // Encrypt password before saving

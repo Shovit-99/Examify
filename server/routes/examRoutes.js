@@ -1,16 +1,32 @@
 const express = require('express');
 const router = express.Router();
-const { protect, admin } = require('../middleware/authMiddleware');
-const { getExams, getSingleExam, createExam, updateExam, deleteExam, getSubjects } = require('../controllers/examController');
+const { protect, admin, teacher, adminOrTeacher } = require('../middleware/authMiddleware');
+const { 
+  getExams, 
+  getSingleExam, 
+  createExam, 
+  updateExam, 
+  deleteExam, 
+  getSubjects,
+  getTeacherExams,
+  scheduleExam
+} = require('../controllers/examController');
 
-// Public access - students need to see exams
+// Public access - students can see exams
 router.get('/', getExams);
 router.get('/subjects', getSubjects);
-router.get('/:id', getSingleExam);
+router.get('/single/:id', getSingleExam);
 
-// Admin only
-router.post('/create', protect, admin, createExam);
-router.put('/:id', protect, admin, updateExam);
-router.delete('/:id', protect, admin, deleteExam);
+// Teacher routes
+router.get('/teacher/my-exams', protect, teacher, getTeacherExams);
+router.post('/teacher/create', protect, teacher, createExam);
+router.put('/teacher/:id', protect, teacher, updateExam);
+router.delete('/teacher/:id', protect, teacher, deleteExam);
+router.put('/teacher/:id/schedule', protect, teacher, scheduleExam);
+
+// Admin routes
+router.post('/admin/create', protect, admin, createExam);
+router.put('/admin/:id', protect, admin, updateExam);
+router.delete('/admin/:id', protect, admin, deleteExam);
 
 module.exports = router;

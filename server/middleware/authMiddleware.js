@@ -29,9 +29,29 @@ const protect = async (req, res, next) => {
   }
 };
 
-// BOUNCER 2: Are you an Admin or Teacher? (Checks the Role)
+// BOUNCER 2: Are you an Admin? (Checks the Role)
 // NOTE: This must ALWAYS run *after* the 'protect' middleware
 const admin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next(); // They have the right role, let them through!
+  } else {
+    res.status(403).json({ message: 'Access denied. Admin clearance required.' });
+  }
+};
+
+// BOUNCER 3: Are you a Teacher? (Checks the Role)
+// NOTE: This must ALWAYS run *after* the 'protect' middleware
+const teacher = (req, res, next) => {
+  if (req.user && req.user.role === 'teacher') {
+    next(); // They have the right role, let them through!
+  } else {
+    res.status(403).json({ message: 'Access denied. Teacher clearance required.' });
+  }
+};
+
+// BOUNCER 4: Are you an Admin or Teacher?
+// NOTE: This must ALWAYS run *after* the 'protect' middleware
+const adminOrTeacher = (req, res, next) => {
   if (req.user && (req.user.role === 'admin' || req.user.role === 'teacher')) {
     next(); // They have the right role, let them through!
   } else {
@@ -39,4 +59,4 @@ const admin = (req, res, next) => {
   }
 };
 
-module.exports = { protect, admin };
+module.exports = { protect, admin, teacher, adminOrTeacher };

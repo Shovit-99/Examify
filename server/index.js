@@ -6,6 +6,7 @@ const authRoutes = require('./routes/authRoutes');
 const examRoutes = require('./routes/examRoutes');
 const gradeRoutes = require('./routes/gradeRoutes');
 const seedRoutes = require('./routes/seedRoutes');
+const registrationCodeRoutes = require('./routes/registrationCodeRoutes');
 
 dotenv.config();
 connectDB();
@@ -17,6 +18,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/seed', seedRoutes);
+app.use('/api/registration-codes', registrationCodeRoutes);
 
 app.get('/', (req, res) => res.send('Examify API is Running...'));
 
