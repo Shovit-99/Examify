@@ -21,6 +21,18 @@ const userSchema = new mongoose.Schema({
       'Technical Training'
     ],
     required: function() { return this.role === 'teacher'; }
+  },
+  instructor: {
+    type: String,
+    enum: [
+      'Dr. Deekshant Semwal',
+      'Dr. Jigyasa Arora',
+      'Dr. Sunil Ghlidiyal',
+      'Dr. Garima Verma',
+      'Dr. Abhishek',
+      'Mr. Amit Srivastava'
+    ],
+    default: null
   }
 }, { timestamps: true });
 

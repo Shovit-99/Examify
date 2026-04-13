@@ -23,7 +23,7 @@ const verifyEmailForRole = (email, role) => {
 
 // --- 1. REGISTER USER ---
 exports.registerUser = async (req, res) => {
-  const { name, email, password, role, subject, registrationCode } = req.body;
+  const { name, email, password, role, subject, registrationCode, instructor } = req.body;
   try {
     // Verify email matches the role
     if (!verifyEmailForRole(email, role)) {
@@ -67,10 +67,27 @@ exports.registerUser = async (req, res) => {
       });
     }
 
+    // Validate instructor if provided
+    if (instructor) {
+      const validInstructors = [
+        'Dr. Deekshant Semwal',
+        'Dr. Jigyasa Arora',
+        'Dr. Sunil Ghlidiyal',
+        'Dr. Garima Verma',
+        'Dr. Abhishek',
+        'Mr. Amit Srivastava'
+      ];
+      if (!validInstructors.includes(instructor)) {
+        return res.status(400).json({ 
+          message: 'Invalid instructor selected'
+        });
+      }
+    }
+
     const userExists = await User.findOne({ email });
     if (userExists) return res.status(400).json({ message: 'User already exists' });
 
-    const user = await User.create({ name, email, password, role, subject });
+    const user = await User.create({ name, email, password, role, subject, instructor: instructor || null });
     
     if (user) {
       // Mark registration code as used
@@ -87,6 +104,7 @@ exports.registerUser = async (req, res) => {
         email: user.email,
         role: user.role,
         subject: user.subject,
+        instructor: user.instructor,
         token: generateToken(user._id),
       });
     }

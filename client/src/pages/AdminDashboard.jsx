@@ -1,16 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, BookOpen, Key, LogOut, Settings, Bell, Search, Trash2, Plus, Copy, Check } from 'lucide-react';
+import { Users, BookOpen, Key, LogOut, Settings, Bell, Search, Trash2, Plus, Copy, Check, Play, Pause, X } from 'lucide-react';
 import axios from 'axios';
 
 const AdminDashboard = () => {
   const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('codes'); // codes, users
+  const [activeTab, setActiveTab] = useState('codes'); // codes, users, exams
   const [registrationCodes, setRegistrationCodes] = useState([]);
   const [loadingCodes, setLoadingCodes] = useState(false);
   const [copyiedCode, setCopyiedCode] = useState(null);
   const [generatingCode, setGeneratingCode] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState('Software Engineering');
+  
+  // Exam monitoring state
+  const [exams, setExams] = useState([]);
+  const [loadingExams, setLoadingExams] = useState(false);
+  const [selectedExam, setSelectedExam] = useState(null);
+  const [examDetails, setExamDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  
   const navigate = useNavigate();
 
   const subjects = [
@@ -39,6 +49,8 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (user && activeTab === 'codes') {
       fetchRegistrationCodes();
+    } else if (user && activeTab === 'exams') {
+      fetchExamsForMonitoring();
     }
   }, [user, activeTab]);
 
@@ -102,6 +114,108 @@ const AdminDashboard = () => {
     }
   };
 
+  // Exam Monitoring Functions
+  const fetchExamsForMonitoring = async () => {
+    try {
+      setLoadingExams(true);
+      const token = localStorage.getItem('examifyToken');
+      const response = await axios.get('http://localhost:5000/api/exams/admin/monitoring/all', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setExams(response.data);
+    } catch (error) {
+      console.error('Error fetching exams:', error);
+      alert('Error fetching exams for monitoring');
+    } finally {
+      setLoadingExams(false);
+    }
+  };
+
+  const fetchExamDetails = async (examId) => {
+    try {
+      setLoadingDetails(true);
+      const token = localStorage.getItem('examifyToken');
+      const response = await axios.get(`http://localhost:5000/api/exams/admin/monitoring/${examId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setExamDetails(response.data);
+      setShowDetailModal(true);
+    } catch (error) {
+      console.error('Error fetching exam details:', error);
+      alert('Error fetching exam details');
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handlePauseExam = async (examId) => {
+    if (!window.confirm('Pause this exam? Students will not be able to submit responses.')) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const token = localStorage.getItem('examifyToken');
+      await axios.put(`http://localhost:5000/api/exams/admin/control/${examId}/pause`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('✓ Exam paused successfully');
+      fetchExamsForMonitoring();
+      if (selectedExam?.id === examId) {
+        fetchExamDetails(examId);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert(error.response?.data?.message || 'Error pausing exam');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResumeExam = async (examId) => {
+    try {
+      setActionLoading(true);
+      const token = localStorage.getItem('examifyToken');
+      await axios.put(`http://localhost:5000/api/exams/admin/control/${examId}/resume`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('✓ Exam resumed successfully');
+      fetchExamsForMonitoring();
+      if (selectedExam?.id === examId) {
+        fetchExamDetails(examId);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert(error.response?.data?.message || 'Error resuming exam');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEndExamEarly = async (examId) => {
+    if (!window.confirm('End this exam early? This will mark it as completed.')) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      const token = localStorage.getItem('examifyToken');
+      await axios.put(`http://localhost:5000/api/exams/admin/control/${examId}/end`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('✓ Exam ended successfully');
+      fetchExamsForMonitoring();
+      if (selectedExam?.id === examId) {
+        fetchExamDetails(examId);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert(error.response?.data?.message || 'Error ending exam');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('examifyUser');
     localStorage.removeItem('examifyToken');
@@ -135,6 +249,17 @@ const AdminDashboard = () => {
           >
             <Key className="w-5 h-5" />
             <span>Registration Codes</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('exams')}
+            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl font-bold transition-all text-left ${
+              activeTab === 'exams'
+                ? 'bg-red-100 text-red-600'
+                : 'text-gray-500 hover:bg-red-100 hover:text-red-600'
+            }`}
+          >
+            <BookOpen className="w-5 h-5" />
+            <span>Exam Monitoring</span>
           </button>
           <button
             onClick={() => setActiveTab('users')}
@@ -373,7 +498,316 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {/* USERS TAB */}
+          {/* EXAM MONITORING TAB */}
+          {activeTab === 'exams' && (
+            <>
+              {/* Hero Banner */}
+              <div className="bg-white rounded-3xl p-8 md:p-10 shadow-md border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden mb-8">
+                <div className="absolute -right-20 -top-20 w-64 h-64 bg-red-50 rounded-full blur-3xl opacity-60"></div>
+
+                <div className="relative z-10">
+                  <h1 className="text-4xl font-black text-gray-800 mb-2">Exam Monitoring & Control</h1>
+                  <p className="text-gray-500 font-medium text-lg max-w-md">
+                    Monitor ongoing exams and control their status
+                  </p>
+                </div>
+
+                <div className="relative z-10">
+                  <div className="bg-red-600 rounded-2xl p-6 text-center shadow-lg shadow-red-200">
+                    <p className="text-red-100 text-sm font-bold mb-1">Active Exams</p>
+                    <p className="text-3xl font-black text-white">
+                      {exams.filter(e => e.status === 'ongoing' || e.status === 'paused').length}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exams List */}
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-6">Exam Status Overview</h2>
+
+                {loadingExams ? (
+                  <div className="bg-white rounded-3xl p-12 shadow-md border border-gray-200 text-center">
+                    <p className="text-gray-500">Loading exams...</p>
+                  </div>
+                ) : exams.length > 0 ? (
+                  <div className="grid gap-4">
+                    {exams.map(exam => (
+                      <div
+                        key={exam.id}
+                        className="bg-white rounded-2xl p-6 shadow-md border border-gray-200 hover:shadow-lg transition-shadow"
+                      >
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          {/* Exam Details */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <h3 className="text-xl font-bold text-gray-800">{exam.subject}</h3>
+                              <span className={`px-3 py-1 text-xs font-bold rounded-full ${
+                                exam.status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                                exam.status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                                exam.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {exam.status.toUpperCase()} {exam.isPaused && '(PAUSED)'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm mb-3">
+                              <div>
+                                <p className="text-gray-500 text-xs font-semibold">INSTRUCTOR</p>
+                                <p className="text-gray-800 font-bold">{exam.instructor}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500 text-xs font-semibold">COURSE CODE</p>
+                                <p className="text-gray-800 font-bold">{exam.courseCode}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500 text-xs font-semibold">TOTAL MARKS</p>
+                                <p className="text-gray-800 font-bold">{exam.totalMarks}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500 text-xs font-semibold">ACTIVE STUDENTS</p>
+                                <p className="text-blue-600 font-bold">{exam.activeStudentsCount}</p>
+                              </div>
+                              <div>
+                                <p className="text-gray-500 text-xs font-semibold">SUBMISSIONS</p>
+                                <p className="text-green-600 font-bold">
+                                  {exam.submissionsReceived}/{exam.totalAttempts}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            {exam.totalAttempts > 0 && (
+                              <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                                <div
+                                  className="bg-green-500 h-2 rounded-full transition-all"
+                                  style={{ width: `${exam.completionRate}%` }}
+                                ></div>
+                              </div>
+                            )}
+
+                            <p className="text-xs text-gray-500">
+                              {exam.totalAttempts > 0 
+                                ? `Completion: ${exam.completionRate}% (${exam.submissionsReceived} submitted)`
+                                : 'No attempts yet'
+                              }
+                            </p>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-col gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedExam(exam);
+                                fetchExamDetails(exam.id);
+                              }}
+                              className="px-4 py-2 bg-blue-100 text-blue-600 rounded-lg font-bold hover:bg-blue-200 transition"
+                            >
+                              View Details
+                            </button>
+
+                            {exam.status === 'ongoing' && !exam.isPaused && (
+                              <button
+                                onClick={() => handlePauseExam(exam.id)}
+                                disabled={actionLoading}
+                                className="px-4 py-2 bg-yellow-100 text-yellow-600 rounded-lg font-bold hover:bg-yellow-200 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                              >
+                                <Pause className="w-4 h-4" />
+                                Pause
+                              </button>
+                            )}
+
+                            {exam.isPaused && (
+                              <button
+                                onClick={() => handleResumeExam(exam.id)}
+                                disabled={actionLoading}
+                                className="px-4 py-2 bg-green-100 text-green-600 rounded-lg font-bold hover:bg-green-200 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                              >
+                                <Play className="w-4 h-4" />
+                                Resume
+                              </button>
+                            )}
+
+                            {(exam.status === 'ongoing' || exam.isPaused) && (
+                              <button
+                                onClick={() => handleEndExamEarly(exam.id)}
+                                disabled={actionLoading}
+                                className="px-4 py-2 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 transition disabled:opacity-50"
+                              >
+                                End Early
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-3xl p-12 shadow-md border border-gray-200 text-center">
+                    <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-500 font-medium text-lg">No exams found</p>
+                    <p className="text-gray-400">Exams will appear here once they are created</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Exam Details Modal */}
+              {showDetailModal && examDetails && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                  <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <div className="p-8">
+                      <div className="flex justify-between items-start mb-6">
+                        <div>
+                          <h2 className="text-3xl font-black text-gray-800 mb-2">
+                            {examDetails.exam.subject}
+                          </h2>
+                          <p className="text-gray-500 font-medium">{examDetails.exam.courseCode}</p>
+                        </div>
+                        <button
+                          onClick={() => setShowDetailModal(false)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition"
+                        >
+                          <X className="w-6 h-6 text-gray-500" />
+                        </button>
+                      </div>
+
+                      {/* Status Badges */}
+                      <div className="flex gap-2 mb-6">
+                        <span className={`px-4 py-2 text-sm font-bold rounded-full ${
+                          examDetails.exam.status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                          examDetails.exam.status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
+                          examDetails.exam.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {examDetails.exam.status.toUpperCase()}
+                        </span>
+                        {examDetails.exam.isPaused && (
+                          <span className="px-4 py-2 text-sm font-bold bg-yellow-100 text-yellow-700 rounded-full">
+                            PAUSED
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Statistics Grid */}
+                      <div className="grid grid-cols-2 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                          <p className="text-blue-600 text-xs font-bold uppercase mb-1">Total Attempts</p>
+                          <p className="text-2xl font-black text-blue-700">{examDetails.statistics.totalAttempts}</p>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                          <p className="text-green-600 text-xs font-bold uppercase mb-1">Submissions</p>
+                          <p className="text-2xl font-black text-green-700">{examDetails.statistics.submissionsReceived}</p>
+                        </div>
+                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                          <p className="text-yellow-600 text-xs font-bold uppercase mb-1">Pending</p>
+                          <p className="text-2xl font-black text-yellow-700">{examDetails.statistics.pendingSubmissions}</p>
+                        </div>
+                        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                          <p className="text-purple-600 text-xs font-bold uppercase mb-1">Completion Rate</p>
+                          <p className="text-2xl font-black text-purple-700">{examDetails.statistics.completionRate}%</p>
+                        </div>
+                      </div>
+
+                      {/* Active Students */}
+                      <div className="mb-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-3">
+                          Active Students ({examDetails.activeStudents.length})
+                        </h3>
+                        {examDetails.activeStudents.length > 0 ? (
+                          <div className="bg-blue-50 rounded-lg border border-blue-200 divide-y divide-blue-200">
+                            {examDetails.activeStudents.map((student, idx) => (
+                              <div key={idx} className="p-3 text-sm">
+                                <p className="font-bold text-gray-800">{student.name}</p>
+                                <p className="text-gray-500 text-xs">{student.email}</p>
+                                <p className="text-gray-400 text-xs mt-1">
+                                  Started: {new Date(student.startedAt).toLocaleTimeString()}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 text-sm">No students currently taking this exam</p>
+                        )}
+                      </div>
+
+                      {/* Submissions */}
+                      {examDetails.submissions.length > 0 && (
+                        <div className="mb-6">
+                          <h3 className="text-lg font-bold text-gray-800 mb-3">Submissions</h3>
+                          <div className="bg-green-50 rounded-lg border border-green-200 divide-y divide-green-200 max-h-[300px] overflow-y-auto">
+                            {examDetails.submissions.map((submission, idx) => (
+                              <div key={idx} className="p-3 text-sm">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-bold text-gray-800">{submission.studentName}</p>
+                                    <p className="text-gray-500 text-xs">{submission.studentEmail}</p>
+                                  </div>
+                                  <span className="px-3 py-1 bg-green-200 text-green-800 text-xs font-bold rounded">
+                                    {submission.grade}
+                                  </span>
+                                </div>
+                                <p className="text-gray-600 text-xs mt-2">
+                                  {submission.marksObtained}/{submission.totalMarks} marks ({submission.percentage.toFixed(1)}%)
+                                </p>
+                                <p className="text-gray-400 text-xs">
+                                  {new Date(submission.submittedAt).toLocaleString()}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      {(examDetails.exam.status === 'ongoing' || examDetails.exam.isPaused) && (
+                        <div className="flex gap-3">
+                          {!examDetails.exam.isPaused && examDetails.exam.status === 'ongoing' && (
+                            <button
+                              onClick={() => {
+                                handlePauseExam(examDetails.exam.id);
+                                setShowDetailModal(false);
+                              }}
+                              disabled={actionLoading}
+                              className="flex-1 px-4 py-3 bg-yellow-100 text-yellow-600 rounded-lg font-bold hover:bg-yellow-200 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              <Pause className="w-5 h-5" />
+                              Pause Exam
+                            </button>
+                          )}
+
+                          {examDetails.exam.isPaused && (
+                            <button
+                              onClick={() => {
+                                handleResumeExam(examDetails.exam.id);
+                                setShowDetailModal(false);
+                              }}
+                              disabled={actionLoading}
+                              className="flex-1 px-4 py-3 bg-green-100 text-green-600 rounded-lg font-bold hover:bg-green-200 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                              <Play className="w-5 h-5" />
+                              Resume Exam
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => {
+                              handleEndExamEarly(examDetails.exam.id);
+                              setShowDetailModal(false);
+                            }}
+                            disabled={actionLoading}
+                            className="flex-1 px-4 py-3 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 transition disabled:opacity-50"
+                          >
+                            End Exam Early
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
           {activeTab === 'users' && (
             <>
               <div className="bg-white rounded-3xl p-8 md:p-10 shadow-md border border-gray-200 relative overflow-hidden">

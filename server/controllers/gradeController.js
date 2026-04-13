@@ -125,3 +125,86 @@ exports.deleteGrade = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Get all exam results for a teacher (for their exams)
+exports.getTeacherExamResults = async (req, res) => {
+  try {
+    const teacherId = req.user.id;
+    const { examId } = req.params;
+
+    console.log('📊 Teacher Results Request:');
+    console.log('  Teacher ID:', teacherId);
+    console.log('  Exam ID:', examId);
+
+    // Verify exam belongs to teacher
+    const exam = await Exam.findById(examId);
+    if (!exam) {
+      console.log('❌ Exam not found');
+      return res.status(404).json({ message: 'Exam not found' });
+    }
+    
+    console.log('  Exam Found:', exam.subject);
+    console.log('  Exam CreatedBy:', exam.createdBy.toString());
+    
+    if (exam.createdBy.toString() !== teacherId) {
+      console.log('❌ Permission denied - exam not created by this teacher');
+      return res.status(403).json({ message: 'You can only view results for your own exams' });
+    }
+
+    const results = await Grade.find({ exam: examId })
+      .populate('student', 'name email roll')
+      .sort({ marksObtained: -1 });
+
+    console.log('✅ Results found:', results.length);
+
+    // Calculate statistics
+    const stats = {
+      totalAttempts: results.length,
+      highestScore: results.length > 0 ? results[0].marksObtained : 0,
+      lowestScore: results.length > 0 ? results[results.length - 1].marksObtained : 0,
+      averageScore: results.length > 0 ? (results.reduce((sum, r) => sum + r.marksObtained, 0) / results.length).toFixed(2) : 0,
+      averagePercentage: results.length > 0 ? (results.reduce((sum, r) => sum + r.percentage, 0) / results.length).toFixed(2) : 0,
+      passCount: results.filter(r => r.percentage >= 40).length,
+      failCount: results.filter(r => r.percentage < 40).length
+    };
+
+    res.status(200).json({
+      exam: {
+        subject: exam.subject,
+        courseCode: exam.courseCode,
+        totalQuestions: exam.totalQuestions
+      },
+      stats,
+      results
+    });
+  } catch (error) {
+    console.error('❌ Error retrieving results:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get grade distribution for an exam (for charts)
+exports.getGradeDistribution = async (req, res) => {
+  try {
+    const { examId } = req.params;
+
+    const grades = await Grade.find({ exam: examId });
+
+    const distribution = {
+      'A+': grades.filter(g => g.percentage >= 90).length,
+      'A': grades.filter(g => g.percentage >= 85 && g.percentage < 90).length,
+      'A-': grades.filter(g => g.percentage >= 80 && g.percentage < 85).length,
+      'B+': grades.filter(g => g.percentage >= 75 && g.percentage < 80).length,
+      'B': grades.filter(g => g.percentage >= 70 && g.percentage < 75).length,
+      'B-': grades.filter(g => g.percentage >= 65 && g.percentage < 70).length,
+      'C+': grades.filter(g => g.percentage >= 60 && g.percentage < 65).length,
+      'C': grades.filter(g => g.percentage >= 55 && g.percentage < 60).length,
+      'D': grades.filter(g => g.percentage >= 50 && g.percentage < 55).length,
+      'F': grades.filter(g => g.percentage < 50).length
+    };
+
+    res.status(200).json(distribution);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

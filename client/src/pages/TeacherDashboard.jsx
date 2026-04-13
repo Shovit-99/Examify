@@ -142,6 +142,7 @@ const TeacherDashboard = () => {
       const token = localStorage.getItem('examifyToken');
       const payload = {
         ...formData,
+        date: formData.date ? new Date(formData.date).toISOString() : null,
         totalMarks: parseInt(formData.totalMarks),
         totalQuestions: formData.totalQuestions ? parseInt(formData.totalQuestions) : 0,
         timeLimit: formData.timeLimit ? parseInt(formData.timeLimit) : null,
@@ -325,20 +326,32 @@ const TeacherDashboard = () => {
                         <h3 className="font-bold text-gray-800 text-lg">{exam.subject}</h3>
                         <p className="text-sm text-gray-400">{exam.courseCode}</p>
                       </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => handleOpenModal(exam)}
-                          className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(exam._id)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => navigate(`/exam/${exam._id}/questions`)}
+                        className="px-4 py-2 text-green-600 hover:bg-green-50 rounded-lg font-medium transition text-sm"
+                      >
+                        📝 Questions
+                      </button>
+                      <button 
+                        onClick={() => navigate(`/exam/${exam._id}/results`)}
+                        className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg font-medium transition text-sm"
+                      >
+                        📊 Results
+                      </button>
+                      <button 
+                        onClick={() => handleOpenModal(exam)}
+                        className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition"
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(exam._id)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                     </div>
 
                     <div className="space-y-3 mb-4">

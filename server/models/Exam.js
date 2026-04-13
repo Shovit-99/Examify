@@ -15,7 +15,6 @@ const examSchema = new mongoose.Schema({
   },
   instructor: {
     type: String,
-    required: true,
     enum: [
       'Dr. Deekshant Semwal',
       'Dr. Jigyasa Arora',
@@ -23,7 +22,8 @@ const examSchema = new mongoose.Schema({
       'Dr. Garima Verma',
       'Dr. Abhishek',
       'Mr. Amit Srivastava'
-    ]
+    ],
+    default: null
   },
   courseCode: {
     type: String,
@@ -49,8 +49,36 @@ const examSchema = new mongoose.Schema({
   description: String,
   status: {
     type: String,
-    enum: ['scheduled', 'ongoing', 'completed', 'cancelled'],
+    enum: ['scheduled', 'ongoing', 'completed', 'cancelled', 'paused'],
     default: 'scheduled'
+  },
+  isPaused: {
+    type: Boolean,
+    default: false
+  },
+  pausedAt: {
+    type: Date,
+    default: null
+  },
+  pausedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  activeStudents: [{
+    studentId: mongoose.Schema.Types.ObjectId,
+    name: String,
+    email: String,
+    startedAt: Date,
+    lastActivityAt: Date
+  }],
+  totalAttempts: {
+    type: Number,
+    default: 0
+  },
+  submissionsReceived: {
+    type: Number,
+    default: 0
   },
   dateUpdatedBy: {
     type: mongoose.Schema.Types.ObjectId,

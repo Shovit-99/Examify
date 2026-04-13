@@ -1,5 +1,6 @@
 const Exam = require('../models/Exam');
 const User = require('../models/User');
+const Grade = require('../models/Grade');
 
 // Get all exams or search exams
 exports.getExams = async (req, res) => {
@@ -23,7 +24,7 @@ exports.getExams = async (req, res) => {
       query.instructor = instructor;
     }
 
-    const exams = await Exam.find(query).populate('createdBy', 'name email').sort({ date: 1 });
+    const exams = await Exam.find(query).populate('createdBy', 'name email').sort({ date: 1, createdAt: -1 });
     res.status(200).json(exams);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -65,11 +66,14 @@ exports.createExam = async (req, res) => {
       });
     }
 
+    // Use provided instructor, fall back to teacher's instructor, or leave as null
+    const examInstructor = instructor || teacher.instructor || null;
+
     const exam = new Exam({
       subject,
-      instructor: instructor || teacher.name,
+      instructor: examInstructor,
       courseCode,
-      date,
+      date: date ? new Date(date) : null,
       timeLimit,
       totalMarks,
       totalQuestions,
@@ -107,9 +111,17 @@ exports.updateExam = async (req, res) => {
     }
 
     if (subject) exam.subject = subject;
-    if (instructor) exam.instructor = instructor;
+    
+    // Handle instructor - teachers can't change it, admins can
+    if (instructor) {
+      if (req.user.role === 'admin') {
+        exam.instructor = instructor;
+      }
+      // Teachers: keep original instructor, don't allow changes
+    }
+    
     if (courseCode) exam.courseCode = courseCode;
-    if (date) exam.date = date;
+    if (date !== undefined) exam.date = date ? new Date(date) : null;
     if (timeLimit) exam.timeLimit = timeLimit;
     if (totalMarks) exam.totalMarks = totalMarks;
     if (totalQuestions) exam.totalQuestions = totalQuestions;
@@ -177,7 +189,7 @@ exports.scheduleExam = async (req, res) => {
 
     const { date, status, timeLimit } = req.body;
     
-    if (date) exam.date = date;
+    if (date !== undefined) exam.date = date ? new Date(date) : null;
     if (status) exam.status = status;
     if (timeLimit) exam.timeLimit = timeLimit;
     
@@ -186,6 +198,256 @@ exports.scheduleExam = async (req, res) => {
 
     await exam.save();
     res.status(200).json({ message: 'Exam scheduled successfully', exam });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// ========== ADMIN EXAM MONITORING & CONTROL ==========
+
+// Get all exams with monitoring data (for admin dashboard)
+exports.getExamsForMonitoring = async (req, res) => {
+  try {
+    const exams = await Exam.find()
+      .populate('createdBy', 'name email')
+      .populate('pausedBy', 'name email')
+      .sort({ date: -1 });
+    
+    const monitoringData = exams.map(exam => ({
+      id: exam._id,
+      subject: exam.subject,
+      courseCode: exam.courseCode,
+      instructor: exam.instructor,
+      status: exam.status,
+      isPaused: exam.isPaused,
+      date: exam.date,
+      timeLimit: exam.timeLimit,
+      totalMarks: exam.totalMarks,
+      totalAttempts: exam.totalAttempts,
+      submissionsReceived: exam.submissionsReceived,
+      activeStudentsCount: exam.activeStudents ? exam.activeStudents.length : 0,
+      completionRate: exam.totalAttempts > 0 
+        ? ((exam.submissionsReceived / exam.totalAttempts) * 100).toFixed(2) 
+        : 0,
+      pausedAt: exam.pausedAt,
+      pausedBy: exam.pausedBy,
+      createdBy: exam.createdBy,
+      createdAt: exam.createdAt
+    }));
+
+    res.status(200).json(monitoringData);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get detailed monitoring data for a specific exam
+exports.getExamMonitoringDetails = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id)
+      .populate('createdBy', 'name email')
+      .populate('activeStudents.studentId', 'name email')
+      .populate('pausedBy', 'name email');
+    
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    const grades = await Grade.find({ exam: req.params.id })
+      .populate('student', 'name email');
+
+    const detailedData = {
+      exam: {
+        id: exam._id,
+        subject: exam.subject,
+        courseCode: exam.courseCode,
+        instructor: exam.instructor,
+        status: exam.status,
+        isPaused: exam.isPaused,
+        date: exam.date,
+        timeLimit: exam.timeLimit,
+        totalMarks: exam.totalMarks,
+        createdBy: exam.createdBy,
+        pausedAt: exam.pausedAt,
+        pausedBy: exam.pausedBy
+      },
+      statistics: {
+        totalAttempts: exam.totalAttempts,
+        submissionsReceived: exam.submissionsReceived,
+        pendingSubmissions: Math.max(0, exam.totalAttempts - exam.submissionsReceived),
+        completionRate: exam.totalAttempts > 0 
+          ? ((exam.submissionsReceived / exam.totalAttempts) * 100).toFixed(2) 
+          : 0,
+        activeStudentsCount: exam.activeStudents ? exam.activeStudents.length : 0
+      },
+      activeStudents: exam.activeStudents || [],
+      submissions: grades.map(g => ({
+        studentId: g.student._id,
+        studentName: g.student.name,
+        studentEmail: g.student.email,
+        marksObtained: g.marksObtained,
+        totalMarks: g.totalMarks,
+        percentage: g.percentage,
+        grade: g.grade,
+        submittedAt: g.submittedAt
+      }))
+    };
+
+    res.status(200).json(detailedData);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Pause an ongoing exam
+exports.pauseExam = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    if (exam.status !== 'ongoing') {
+      return res.status(400).json({ message: 'Can only pause ongoing exams' });
+    }
+
+    if (exam.isPaused) {
+      return res.status(400).json({ message: 'Exam is already paused' });
+    }
+
+    exam.isPaused = true;
+    exam.pausedAt = new Date();
+    exam.pausedBy = req.user.id;
+    exam.status = 'paused';
+    await exam.save();
+
+    res.status(200).json({ 
+      message: 'Exam paused successfully', 
+      exam: {
+        id: exam._id,
+        status: exam.status,
+        isPaused: exam.isPaused,
+        pausedAt: exam.pausedAt
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Resume a paused exam
+exports.resumeExam = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    if (!exam.isPaused) {
+      return res.status(400).json({ message: 'Exam is not paused' });
+    }
+
+    exam.isPaused = false;
+    exam.pausedAt = null;
+    exam.pausedBy = null;
+    exam.status = 'ongoing';
+    await exam.save();
+
+    res.status(200).json({ 
+      message: 'Exam resumed successfully', 
+      exam: {
+        id: exam._id,
+        status: exam.status,
+        isPaused: exam.isPaused
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// End exam early (Force completion)
+exports.endExamEarly = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    if (exam.status === 'completed') {
+      return res.status(400).json({ message: 'Exam is already completed' });
+    }
+
+    exam.status = 'completed';
+    exam.isPaused = false;
+    exam.pausedAt = null;
+    exam.dateUpdatedBy = req.user.id;
+    exam.dateUpdatedAt = new Date();
+    await exam.save();
+
+    res.status(200).json({ 
+      message: 'Exam ended successfully', 
+      exam: {
+        id: exam._id,
+        status: exam.status,
+        completedAt: exam.dateUpdatedAt
+      }
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Register student as taking exam (called when student starts exam)
+exports.registerStudentAttempt = async (req, res) => {
+  try {
+    const { examId, studentId, studentName, studentEmail } = req.body;
+    
+    const exam = await Exam.findById(examId);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    // Add to active students
+    const studentIndex = exam.activeStudents.findIndex(
+      s => s.studentId.toString() === studentId
+    );
+
+    if (studentIndex === -1) {
+      exam.activeStudents.push({
+        studentId,
+        name: studentName,
+        email: studentEmail,
+        startedAt: new Date(),
+        lastActivityAt: new Date()
+      });
+      exam.totalAttempts += 1;
+    }
+
+    await exam.save();
+
+    res.status(200).json({ 
+      message: 'Student attempt registered', 
+      exam: { id: exam._id, totalAttempts: exam.totalAttempts }
+    });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// Update student submission
+exports.updateStudentSubmission = async (req, res) => {
+  try {
+    const { examId, studentId } = req.body;
+    
+    const exam = await Exam.findById(examId);
+    if (!exam) return res.status(404).json({ message: 'Exam not found' });
+
+    // Remove from active students
+    exam.activeStudents = exam.activeStudents.filter(
+      s => s.studentId.toString() !== studentId
+    );
+
+    exam.submissionsReceived += 1;
+    await exam.save();
+
+    res.status(200).json({ 
+      message: 'Submission recorded', 
+      exam: { 
+        id: exam._id, 
+        submissionsReceived: exam.submissionsReceived 
+      }
+    });
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
